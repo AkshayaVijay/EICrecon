@@ -2,14 +2,10 @@
 // Copyright (C) 2022 - 2025 Whitney Armstrong, Sylvester Joosten, Chao Peng, David Lawrence, Thomas Britton, Wouter Deconinck, Maria Zurek, Akshaya Vijay, Nathan Brei, Dmitry Kalinkin, Derek Anderson, Minho Kim
 
 #include <Evaluator/DD4hepUnits.h>
-#include <JANA/JApplication.h>
 #include <JANA/JApplicationFwd.h>
 #include <JANA/Utils/JTypeInfo.h>
 #include <edm4eic/unit_system.h>
-#include <edm4hep/SimCalorimeterHit.h>
 #include <cmath>
-#include <map>
-#include <memory>
 #include <string>
 #include <variant>
 #include <vector>
@@ -17,9 +13,6 @@
 #include "algorithms/calorimetry/CalorimeterHitDigiConfig.h"
 #include "algorithms/calorimetry/ImagingTopoClusterConfig.h"
 #include "algorithms/calorimetry/SimCalorimeterHitProcessorConfig.h"
-#include "algorithms/digi/PulseGenerationConfig.h"
-#include "algorithms/digi/PulseCombinerConfig.h"
-#include "algorithms/digi/PulseNoiseConfig.h"
 #include "extensions/jana/JOmniFactoryGeneratorT.h"
 #include "factories/calorimetry/CalorimeterClusterRecoCoG_factory.h"
 #include "factories/calorimetry/CalorimeterClusterShape_factory.h"
@@ -31,9 +24,7 @@
 #include "factories/calorimetry/ImagingTopoCluster_factory.h"
 #include "factories/calorimetry/SimCalorimeterHitProcessor_factory.h"
 #include "factories/calorimetry/TruthEnergyPositionClusterMerger_factory.h"
-#include "factories/digi/PulseGeneration_factory.h"
-#include "factories/digi/PulseCombiner_factory.h"
-#include "factories/digi/PulseNoise_factory.h"
+#include "factories/meta/CollectionCollector_factory.h"
 
 extern "C" {
 void InitPlugin(JApplication* app) {
@@ -53,24 +44,6 @@ void InitPlugin(JApplication* app) {
       EcalBarrelScFi_inversePropagationSpeed = {(1. / 160) * edm4eic::unit::ns / edm4eic::unit::mm};
   decltype(SimCalorimeterHitProcessorConfig::fixedTimeDelay) EcalBarrelScFi_fixedTimeDelay = {
       2 * edm4eic::unit::ns};
-  decltype(SimCalorimeterHitProcessorConfig::timeWindow) EcalBarrelScFi_timeWindow = {
-      100 * edm4eic::unit::ns};
-
-  decltype(PulseGenerationConfig::pulse_shape_function) EcalBarrelScFi_pulse_shape_function = {
-      "LandauPulse"};
-  decltype(PulseGenerationConfig::pulse_shape_params) EcalBarrelScFi_pulse_shape_params = {
-      1.0, 2 * edm4eic::unit::ns};
-  decltype(PulseGenerationConfig::ignore_thres) EcalBarrelScFi_ignore_thres = {5.0e-5};
-  decltype(PulseGenerationConfig::timestep) EcalBarrelScFi_timestep = {0.5 * edm4eic::unit::ns};
-
-  decltype(PulseCombinerConfig::combine_field) EcalBarrelScFi_combine_field           = {"grid"};
-  decltype(PulseCombinerConfig::minimum_separation) EcalBarrelScFi_minimum_separation = {
-      100 * edm4eic::unit::ns};
-  decltype(PulseNoiseConfig::poles) EcalBarrelScFi_poles       = {2};
-  decltype(PulseNoiseConfig::variance) EcalBarrelScFi_variance = {0.5};
-  decltype(PulseNoiseConfig::alpha) EcalBarrelScFi_alpha       = {0};
-  decltype(PulseNoiseConfig::scale) EcalBarrelScFi_scale       = {5.4e-5};
-  decltype(PulseNoiseConfig::pedestal) EcalBarrelScFi_pedestal = {1.6e-4};
 
   // Make sure digi and reco use the same value
   decltype(CalorimeterHitDigiConfig::capADC) EcalBarrelScFi_capADC = 16384; //16384,  14bit ADC
@@ -85,12 +58,11 @@ void InitPlugin(JApplication* app) {
       {
           .attenuationParameters            = EcalBarrelScFi_attPars,
           .readout                          = "EcalBarrelScFiHits",
-          .attenuationReferencePositionName = "EcalBarrel_LightGuide_PositivePosZ",
+          .attenuationReferencePositionName = "EcalBarrel_Readout_zmax",
           .hitMergeFields                   = EcalBarrelScFi_hitMergeFields,
           .contributionMergeFields          = EcalBarrelScFi_contributionMergeFields,
           .inversePropagationSpeed          = EcalBarrelScFi_inversePropagationSpeed,
           .fixedTimeDelay                   = EcalBarrelScFi_fixedTimeDelay,
-          .timeWindow                       = EcalBarrelScFi_timeWindow,
       },
       app // TODO: Remove me once fixed
       ));
@@ -100,74 +72,11 @@ void InitPlugin(JApplication* app) {
       {
           .attenuationParameters            = EcalBarrelScFi_attPars,
           .readout                          = "EcalBarrelScFiHits",
-          .attenuationReferencePositionName = "EcalBarrel_LightGuide_NegativePosZ",
+          .attenuationReferencePositionName = "EcalBarrel_Readout_zmin",
           .hitMergeFields                   = EcalBarrelScFi_hitMergeFields,
           .contributionMergeFields          = EcalBarrelScFi_contributionMergeFields,
           .inversePropagationSpeed          = EcalBarrelScFi_inversePropagationSpeed,
           .fixedTimeDelay                   = EcalBarrelScFi_fixedTimeDelay,
-          .timeWindow                       = EcalBarrelScFi_timeWindow,
-      },
-      app // TODO: Remove me once fixed
-      ));
-  app->Add(new JOmniFactoryGeneratorT<PulseGeneration_factory<edm4hep::SimCalorimeterHit>>(
-      "EcalBarrelScFiPPulses", {"EcalBarrelScFiPAttenuatedHits"}, {"EcalBarrelScFiPPulses"},
-      {
-          .pulse_shape_function = EcalBarrelScFi_pulse_shape_function,
-          .pulse_shape_params   = EcalBarrelScFi_pulse_shape_params,
-          .ignore_thres         = EcalBarrelScFi_ignore_thres,
-          .timestep             = EcalBarrelScFi_timestep,
-      },
-      app // TODO: Remove me once fixed
-      ));
-  app->Add(new JOmniFactoryGeneratorT<PulseGeneration_factory<edm4hep::SimCalorimeterHit>>(
-      "EcalBarrelScFiNPulses", {"EcalBarrelScFiNAttenuatedHits"}, {"EcalBarrelScFiNPulses"},
-      {
-          .pulse_shape_function = EcalBarrelScFi_pulse_shape_function,
-          .pulse_shape_params   = EcalBarrelScFi_pulse_shape_params,
-          .ignore_thres         = EcalBarrelScFi_ignore_thres,
-          .timestep             = EcalBarrelScFi_timestep,
-      },
-      app // TODO: Remove me once fixed
-      ));
-  app->Add(new JOmniFactoryGeneratorT<PulseCombiner_factory>(
-      "EcalBarrelScFiPCombinedPulses", {"EcalBarrelScFiPPulses"}, {"EcalBarrelScFiPCombinedPulses"},
-      {
-          .minimum_separation = EcalBarrelScFi_minimum_separation,
-          .readout            = "EcalBarrelScFiHits",
-          .combine_field      = EcalBarrelScFi_combine_field,
-      },
-      app // TODO: Remove me once fixed
-      ));
-  app->Add(new JOmniFactoryGeneratorT<PulseCombiner_factory>(
-      "EcalBarrelScFiNCombinedPulses", {"EcalBarrelScFiNPulses"}, {"EcalBarrelScFiNCombinedPulses"},
-      {
-          .minimum_separation = EcalBarrelScFi_minimum_separation,
-          .readout            = "EcalBarrelScFiHits",
-          .combine_field      = EcalBarrelScFi_combine_field,
-      },
-      app // TODO: Remove me once fixed
-      ));
-  app->Add(new JOmniFactoryGeneratorT<PulseNoise_factory>(
-      "EcalBarrelScFiPCombinedPulsesWithNoise", {"EventHeader", "EcalBarrelScFiPCombinedPulses"},
-      {"EcalBarrelScFiPCombinedPulsesWithNoise"},
-      {
-          .poles    = EcalBarrelScFi_poles,
-          .variance = EcalBarrelScFi_variance,
-          .alpha    = EcalBarrelScFi_alpha,
-          .scale    = EcalBarrelScFi_scale,
-          .pedestal = EcalBarrelScFi_pedestal,
-      },
-      app // TODO: Remove me once fixed
-      ));
-  app->Add(new JOmniFactoryGeneratorT<PulseNoise_factory>(
-      "EcalBarrelScFiNCombinedPulsesWithNoise", {"EventHeader", "EcalBarrelScFiNCombinedPulses"},
-      {"EcalBarrelScFiNCombinedPulsesWithNoise"},
-      {
-          .poles    = EcalBarrelScFi_poles,
-          .variance = EcalBarrelScFi_variance,
-          .alpha    = EcalBarrelScFi_alpha,
-          .scale    = EcalBarrelScFi_scale,
-          .pedestal = EcalBarrelScFi_pedestal,
       },
       app // TODO: Remove me once fixed
       ));
@@ -203,7 +112,7 @@ void InitPlugin(JApplication* app) {
           .readout         = "EcalBarrelScFiHits",
           .layerField      = "layer",
           .sectorField     = "sector",
-          .localDetFields  = {"system", "sector"},
+          .localDetFields  = {"system","sector"},
           // here we want to use grid center position (XY) but keeps the z information from fiber-segment
           // TODO: a more realistic way to get z is to reconstruct it from timing
           .maskPos       = "xy",
@@ -239,7 +148,11 @@ void InitPlugin(JApplication* app) {
        "EcalBarrelScFiRawHitAssociations"},   // edm4eic::MCRecoCalorimeterHitAssociation
       {"EcalBarrelScFiClustersWithoutShapes", // edm4eic::Cluster
        "EcalBarrelScFiClusterAssociationsWithoutShapes"}, // edm4eic::MCRecoClusterParticleAssociation
-      {.energyWeight = "log", .sampFrac = 1.0, .logWeightBase = 6.2, .enableEtaBounds = false},
+      {
+      .energyWeight = "log", 
+      .sampFrac = 1.0, 
+      .logWeightBase = 6.2, 
+      .enableEtaBounds = false},
       app // TODO: Remove me once fixed
       ));
   app->Add(new JOmniFactoryGeneratorT<CalorimeterClusterShape_factory>(
@@ -247,6 +160,54 @@ void InitPlugin(JApplication* app) {
       {"EcalBarrelScFiClustersWithoutShapes", "EcalBarrelScFiClusterAssociationsWithoutShapes"},
       {"EcalBarrelScFiClusters", "EcalBarrelScFiClusterAssociations"},
       {.longitudinalShowerInfoAvailable = true, .energyWeight = "log", .logWeightBase = 6.2}, app));
+    
+//-------------------------------------------------------------------------------------------------------- 
+// TopoClustering on ScFi 
+//--------------------------------------------------------------------------------------------------------
+    
+  app->Add(new JOmniFactoryGeneratorT<ImagingTopoCluster_factory>(
+      "EcalBarrelScFiProtoClusters_Topo", {"EcalBarrelScFiRecHits"},
+      {"EcalBarrelScFiProtoClusters_Topo"},
+      {   
+          .readout              = "EcalBarrelScFiHits",
+          .neighbourLayersRange = 2, //  # id diff for adjacent layer
+          .sameLayerDistXYZ     = {80.0 * dd4hep::mm, 80.0 * dd4hep::mm, 40.0 * dd4hep::mm},     //  # same layer
+          .diffLayerDistXYZ     = {80.0 * dd4hep::mm, 80.0 * dd4hep::mm, 40.0 * dd4hep::mm}, 
+          .sameLayerMode        = eicrecon::ImagingTopoClusterConfig::ELayerMode::xyz,
+          .diffLayerMode        = eicrecon::ImagingTopoClusterConfig::ELayerMode::xyz,
+          .sectorDist           = 5.0 * dd4hep::cm,
+          .minClusterHitEdep    = 0,
+          .minClusterCenterEdep = 0,
+          .minClusterEdep       = 100 * dd4hep::MeV,
+          .minClusterNhits      = 10,
+          
+      },
+      app // TODO: Remove me once fixed
+      ));  
+
+  
+  app->Add(new JOmniFactoryGeneratorT<CalorimeterClusterRecoCoG_factory>(
+      "EcalBarrelScFiTopoClustersWithoutShapes",
+      {"EcalBarrelScFiProtoClusters_Topo",         // edm4eic::ProtoClusterCollection
+       "EcalBarrelScFiRawHitAssociations"},   // edm4eic::MCRecoCalorimeterHitAssociation
+      {"EcalBarrelScFiTopoClustersWithoutShapes", // edm4eic::Cluster
+       "EcalBarrelScFiTopoClusterAssociationsWithoutShapes"}, // edm4eic::MCRecoClusterParticleAssociation
+      {
+       .energyWeight = "log", 
+       .sampFrac = 1.0, 
+       .logWeightBase = 6.2, 
+       .enableEtaBounds = false},
+      app // TODO: Remove me once fixed
+      ));
+  app->Add(new JOmniFactoryGeneratorT<CalorimeterClusterShape_factory>(
+      "EcalBarrelScFiTopoClusters",
+      {"EcalBarrelScFiTopoClustersWithoutShapes", "EcalBarrelScFiTopoClusterAssociationsWithoutShapes"},
+      {"EcalBarrelScFiTopoClusters", "EcalBarrelScFiTopoClusterAssociations"},
+      {.longitudinalShowerInfoAvailable = true, .energyWeight = "log", .logWeightBase = 6.2}, app));
+    
+//-------------------------------------------------------------------------------------------------------- 
+
+
 
   // Make sure digi and reco use the same value
   decltype(CalorimeterHitDigiConfig::capADC) EcalBarrelImaging_capADC = 8192; //8192,  13bit ADC
@@ -293,10 +254,11 @@ void InitPlugin(JApplication* app) {
   app->Add(new JOmniFactoryGeneratorT<ImagingTopoCluster_factory>(
       "EcalBarrelImagingProtoClusters", {"EcalBarrelImagingRecHits"},
       {"EcalBarrelImagingProtoClusters"},
-      {
+      {  
+          .readout              = "EcalBarrelImagingHits",
           .neighbourLayersRange = 2, //  # id diff for adjacent layer
-          .sameLayerDistTZ      = {2.0 * dd4hep::mm, 2 * dd4hep::mm},     //  # same layer
-          .diffLayerDistEtaPhi  = {10 * dd4hep::mrad, 10 * dd4hep::mrad}, //  # adjacent layer
+          .sameLayerDistTZ      = {2.0 * dd4hep::mm, 2.0 * dd4hep::mm},                       //  # same layer
+          .diffLayerDistEtaPhi  = {10.0 * dd4hep::mrad, 10.0 * dd4hep::mrad},                 //  # adjacent layer
           .sameLayerMode        = eicrecon::ImagingTopoClusterConfig::ELayerMode::tz,
           .diffLayerMode        = eicrecon::ImagingTopoClusterConfig::ELayerMode::etaphi,
           .sectorDist           = 3.0 * dd4hep::cm,
@@ -318,6 +280,7 @@ void InitPlugin(JApplication* app) {
       },
       app // TODO: Remove me once fixed
       ));
+    
   app->Add(new JOmniFactoryGeneratorT<CalorimeterClusterShape_factory>(
       "EcalBarrelImagingClusters",
       {"EcalBarrelImagingClustersWithoutShapes",
@@ -325,6 +288,80 @@ void InitPlugin(JApplication* app) {
       {"EcalBarrelImagingClusters", "EcalBarrelImagingClusterAssociations"},
       {.longitudinalShowerInfoAvailable = false, .energyWeight = "log", .logWeightBase = 6.2},
       app));
+
+//-------------------------------------------------------------------------------------------------------- 
+// Combined Collection of ScFi and Imaging Hits
+//--------------------------------------------------------------------------------------------------------
+
+
+
+  app->Add(new JOmniFactoryGeneratorT<CollectionCollector_factory<edm4eic::CalorimeterHit>>(
+      "EcalBarrelRecHits_Topo", {"EcalBarrelScFiRecHits", "EcalBarrelImagingRecHits"},
+      {"EcalBarrelRecHits_Topo"},
+      app
+  ));
+
+  app->Add(new JOmniFactoryGeneratorT<CollectionCollector_factory<edm4eic::MCRecoCalorimeterHitAssociation>>(
+      "EcalBarrelRawHitAssociations_Topo", {"EcalBarrelImagingRawHitAssociations", "EcalBarrelScFiRawHitAssociations"},
+      {"EcalBarrelRawHitAssociations_Topo"},
+      app
+  ));
+
+//-------------------------------------------------------------------------------------------------------- 
+// TopoClustering on Combined Collection of ScFi and Imaging Hits
+// (SystemID based Clustering)
+//--------------------------------------------------------------------------------------------------------
+
+
+    
+  app->Add(new JOmniFactoryGeneratorT<ImagingTopoCluster_factory>(
+      "EcalBarrelProtoClusters_Topo", {"EcalBarrelRecHits_Topo"},
+      {"EcalBarrelProtoClusters_Topo"},
+      {    
+           .readout              = "EcalBarrelScFiHits",  // we need a readout name to connect the cell ID to a system ID only, so it does not matter that this is more specific than the hits we feed here
+          .neighbourLayersRange      = 2, //  # id diff for adjacent layer
+          .ScFi_sameLayerDistXYZ     = {80.0 * dd4hep::mm, 80.0 * dd4hep::mm, 40.0 * dd4hep::mm},     //  # same layer
+          .Img_sameLayerDistTZ       = {2.0 * dd4hep::mm, 2.0 * dd4hep::mm}, 
+          .ScFi_diffLayerDistXYZ     = {80.0 * dd4hep::mm, 80.0 * dd4hep::mm, 40.0 * dd4hep::mm},
+          .Img_diffLayerDistEtaPhi   = {10.0 * dd4hep::mrad, 10.0 * dd4hep::mrad}, 
+          .ScFi_sameLayerMode        = eicrecon::ImagingTopoClusterConfig::ELayerMode::xyz,
+          .Img_sameLayerMode        = eicrecon::ImagingTopoClusterConfig::ELayerMode::tz,
+          .ScFi_diffLayerMode        = eicrecon::ImagingTopoClusterConfig::ELayerMode::xyz,
+          .Img_diffLayerMode        = eicrecon::ImagingTopoClusterConfig::ELayerMode::etaphi,
+          .ScFi_sectorDist           = 5.0 * dd4hep::cm,
+          .Img_sectorDist           = 3.0 * dd4hep::cm, 
+          .minClusterHitEdep    = 0,
+          .minClusterCenterEdep = 0,
+          .minClusterEdep       = 100 * dd4hep::MeV,
+          .minClusterNhits      = 10,
+          
+      },
+      app // TODO: Remove me once fixed
+      ));  
+
+    
+  app->Add(new JOmniFactoryGeneratorT<CalorimeterClusterRecoCoG_factory>(
+      "EcalBarrelTopoClustersWithoutShapes",
+      {"EcalBarrelProtoClusters_Topo",         // edm4eic::ProtoClusterCollection
+       "EcalBarrelRawHitAssociations_Topo"},   // edm4eic::MCRecoCalorimeterHitAssociation
+      {"EcalBarrelTopoClustersWithoutShapes", // edm4eic::Cluster
+       "EcalBarrelTopoClusterAssociationsWithoutShapes"}, // edm4eic::MCRecoClusterParticleAssociation
+      { 
+       .energyWeight     = "log", 
+       .sampFrac         = 1.0, 
+       .logWeightBase    = 6.2, 
+       .enableEtaBounds  = false,
+      },
+      app // TODO: Remove me once fixed
+      ));
+  app->Add(new JOmniFactoryGeneratorT<CalorimeterClusterShape_factory>(
+      "EcalBarrelTopoClusters",
+      {"EcalBarrelTopoClustersWithoutShapes", "EcalBarrelTopoClusterAssociationsWithoutShapes"},
+      {"EcalBarrelTopoClusters", "EcalBarrelTopoClusterAssociations"},
+      {.longitudinalShowerInfoAvailable = true, .energyWeight = "log", .logWeightBase = 6.2}, app));
+    
+//--------------------------------------------------------------------------------------------------------
+   
   app->Add(new JOmniFactoryGeneratorT<EnergyPositionClusterMerger_factory>(
       "EcalBarrelClusters",
       {"EcalBarrelScFiClusters", "EcalBarrelScFiClusterAssociations", "EcalBarrelImagingClusters",
@@ -344,5 +381,9 @@ void InitPlugin(JApplication* app) {
       {"EcalBarrelTruthClusters", "EcalBarrelTruthClusterAssociations"},
       app // TODO: Remove me once fixed
       ));
+
+
+    
 }
 }
+
